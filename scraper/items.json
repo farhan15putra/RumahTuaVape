@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Fresh Drops",
+    "image_url": "https://cdn.vapehan.com/promo-banners/541b032c-f290-475b-be7d-be95d0e52a83.jpeg",
+    "image_file": "scraper\\images\\001_fresh_drops.jpg"
+  },
+  {
+    "name": "Liquid Deals Hemat hingga 50% untuk liquid pilihan! 44 produk Shop Now Disc Up To 50%",
+    "image_url": "https://cdn.vapehan.com/promo-banners/58f2c527-2d73-471b-a90a-8e609c288f2d.png",
+    "image_file": "scraper\\images\\002_liquid_deals_hemat_hingga_50_untuk_liquid_pilihan_44_produk_.webp"
+  },
+  {
+    "name": "Pod Deals Hemat hingga 80% device elegan, jangan kehabisan! 18 produk Shop Now Disc Up To 80%",
+    "image_url": "https://cdn.vapehan.com/promo-banners/b44a6649-7344-4b26-b355-e7bb5275fcac.png",
+    "image_file": "scraper\\images\\003_pod_deals_hemat_hingga_80_device_elegan_jangan_kehabisan_18_.webp"
+  },
+  {
+    "name": "Shop Now",
+    "image_url": "https://cdn.vapehan.com/promo-banners/de77e93a-b71d-4621-a203-f624d051c6dc.png",
+    "image_file": "scraper\\images\\004_shop_now.png"
+  },
+  {
+    "name": "Tim Vapehan",
+    "image_url": "https://cdn.vapehan.com/team/c4b73723-9c0d-4040-8882-cedf1be6c1d0.png",
+    "image_file": "scraper\\images\\005_tim_vapehan.png"
+  }
+]
