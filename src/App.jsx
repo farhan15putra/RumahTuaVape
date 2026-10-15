@@ -8,6 +8,7 @@ import {
 import { PRODUCTS, CATEGORIES, STORE_FEATURES, STORE_INFO, BRANDS, PROMO_DEALS } from './data/products';
 import ProductPage from './ProductPage';
 import CheckoutPage from './CheckoutPage';
+import TrustPage from './TrustPage';
 import './App.css';
 
 // Route hash: #/product/<slug>. Ambil slug dari hash saat ini.
@@ -17,38 +18,76 @@ const getSlugFromHash = () => {
 };
 
 export default function App() {
-  const [isAgeVerified, setIsAgeVerified] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [cart, setCart] = useState([]);
+  const [isAgeVerified, setIsAgeVerified] = useState(() => {
+    try {
+      return localStorage.getItem('rtv_age_verified') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const queryParams = new URLSearchParams(window.location.search);
+  const [selectedCategory, setSelectedCategory] = useState(queryParams.get('category') || 'all');
+  const [searchQuery, setSearchQuery] = useState(queryParams.get('q') || '');
+  const [minPrice, setMinPrice] = useState(queryParams.get('min') || '');
+  const [maxPrice, setMaxPrice] = useState(queryParams.get('max') || '');
+  const [nicotineFilter, setNicotineFilter] = useState(queryParams.get('nicotine') || 'all');
+  const [sizeFilter, setSizeFilter] = useState(queryParams.get('size') || 'all');
+  const [page, setPage] = useState(Number(queryParams.get('page')) || 1);
+  const [cart, setCart] = useState(() => {
+    try {
+      const saved = localStorage.getItem('rtv_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
   const [notification, setNotification] = useState(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [brandFilter, setBrandFilter] = useState('all');
-  const [onlyDiscount, setOnlyDiscount] = useState(false);
-  const [sortBy, setSortBy] = useState('default');
+  const [accountEmail, setAccountEmail] = useState(() => localStorage.getItem('rtv_account_email') || '');
+  const [brandFilter, setBrandFilter] = useState(queryParams.get('brand') || 'all');
+  const [onlyDiscount, setOnlyDiscount] = useState(queryParams.get('discount') === '1');
+  const [sortBy, setSortBy] = useState(queryParams.get('sort') || 'default');
+  const [wishlist, setWishlist] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('rtv_wishlist') || '[]'); } catch { return []; }
+  });
+  const [trustRoute, setTrustRoute] = useState(() => window.location.hash.match(/^#\/(account|wishlist|about|policy)$/)?.[1] || null);
   const [productSlug, setProductSlug] = useState(getSlugFromHash);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rtv_cart', JSON.stringify(cart));
+    } catch (e) {
+      console.error('Failed to save cart to localStorage:', e);
+    }
+  }, [cart]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    const filters = { q: searchQuery, category: selectedCategory !== 'all' ? selectedCategory : '', brand: brandFilter !== 'all' ? brandFilter : '', min: minPrice, max: maxPrice, nicotine: nicotineFilter !== 'all' ? nicotineFilter : '', size: sizeFilter !== 'all' ? sizeFilter : '', discount: onlyDiscount ? '1' : '', sort: sortBy !== 'default' ? sortBy : '', page: page > 1 ? String(page) : '' };
+    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
+    const next = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash}`);
+  }, [searchQuery, selectedCategory, brandFilter, minPrice, maxPrice, nicotineFilter, sizeFilter, onlyDiscount, sortBy, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedCategory, brandFilter, minPrice, maxPrice, nicotineFilter, sizeFilter, onlyDiscount, sortBy]);
+
+  useEffect(() => {
+    try { localStorage.setItem('rtv_wishlist', JSON.stringify(wishlist)); } catch {}
+  }, [wishlist]);
 
   useEffect(() => {
     const onHash = () => {
       const slug = getSlugFromHash();
       setProductSlug(slug);
+      setTrustRoute(window.location.hash.match(/^#\/(account|wishlist|about|policy)$/)?.[1] || null);
       window.scrollTo({ top: 0 });
-      if (!slug) {
-        window.setTimeout(() => document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth' }), 0);
-      }
+      if (!slug && !window.location.hash.match(/^#\/(account|wishlist|about|policy)$/)) window.setTimeout(() => document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth' }), 0);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
-  }, []);
-
-  // Check saved age verification
-  useEffect(() => {
-    const verified = localStorage.getItem('rtv_age_verified');
-    if (verified === 'true') {
-      setIsAgeVerified(true);
-    }
   }, []);
 
   const handleVerifyAge = () => {
@@ -64,17 +103,56 @@ export default function App() {
   };
 
   const addToCart = (product, qty = 1) => {
+    if (!product.price || product.price <= 0) {
+      showToast(`Harga belum ditentukan untuk produk ini. Silakan hubungi kami.`);
+      return;
+    }
+
+    const maxStock = typeof product.stock === 'number' ? product.stock : Infinity;
+    if (product.inStock === false || maxStock <= 0) {
+      showToast(`Maaf, stok ${product.name.slice(0, 20)}... sedang habis`);
+      return;
+    }
+
+    let reachedMax = false;
     setCart((prevCart) => {
       const existing = prevCart.find((item) => item.id === product.id);
+      const currentQty = existing ? existing.quantity : 0;
+
+      if (currentQty >= maxStock) {
+        reachedMax = true;
+        return prevCart;
+      }
+
+      const newQty = Math.min(currentQty + qty, maxStock);
       if (existing) {
         return prevCart.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + qty } : item
+          item.id === product.id ? { ...item, quantity: newQty } : item
         );
       }
-      return [...prevCart, { ...product, quantity: qty }];
+      return [...prevCart, { ...product, quantity: newQty }];
     });
-    showToast(`✓ Ditambahkan ke keranjang: ${product.name.slice(0, 24)}...`);
+
+    if (reachedMax) {
+      showToast(`⚠️ Kuantitas sudah mencapai batas stok (${maxStock})`);
+    } else {
+      showToast(`✓ Ditambahkan ke keranjang: ${product.name.slice(0, 24)}...`);
+    }
   };
+
+  const requireLoginForCheckout = () => {
+    if (accountEmail) {
+      setIsCartOpen(false);
+      setIsCheckoutOpen(true);
+      return;
+    }
+    setIsCartOpen(false);
+    setTrustRoute('account');
+    window.location.hash = '#/account';
+    showToast('Login diperlukan sebelum checkout');
+  };
+
+  const toggleWishlist = (id) => setWishlist((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
 
   const activeProduct = productSlug
     ? PRODUCTS.find((p) => p.slug === productSlug)
@@ -85,8 +163,13 @@ export default function App() {
       return prevCart
         .map((item) => {
           if (item.id === id) {
+            const maxStock = typeof item.stock === 'number' ? item.stock : Infinity;
+            if (delta > 0 && item.quantity >= maxStock) {
+              showToast(`⚠️ Kuantitas sudah mencapai batas stok (${maxStock})`);
+              return item;
+            }
             const newQty = item.quantity + delta;
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
+            return newQty > 0 ? { ...item, quantity: Math.min(newQty, maxStock) } : null;
           }
           return item;
         })
@@ -97,35 +180,40 @@ export default function App() {
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const totalCartPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  const hasActiveFilter = brandFilter !== 'all' || onlyDiscount || sortBy !== 'default' || searchQuery !== '' || selectedCategory !== 'all';
+  const hasActiveFilter = brandFilter !== 'all' || onlyDiscount || sortBy !== 'default' || searchQuery !== '' || selectedCategory !== 'all' || minPrice || maxPrice || nicotineFilter !== 'all' || sizeFilter !== 'all';
 
   const resetFilters = () => {
-    setSearchQuery('');
-    setSelectedCategory('all');
-    setBrandFilter('all');
-    setOnlyDiscount(false);
-    setSortBy('default');
+    setSearchQuery(''); setSelectedCategory('all'); setBrandFilter('all'); setOnlyDiscount(false); setSortBy('default'); setMinPrice(''); setMaxPrice(''); setNicotineFilter('all'); setSizeFilter('all'); setPage(1);
   };
 
-  // Filtered & Sorted Products
   const q = searchQuery.toLowerCase();
   const filteredProducts = PRODUCTS.filter((item) => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesBrand = brandFilter === 'all' || item.brand === brandFilter;
     const matchesDiscount = !onlyDiscount || item.discountPercent >= 15;
     const matchesSearch = item.name.toLowerCase().includes(q) || item.brand.toLowerCase().includes(q);
-    return matchesCategory && matchesBrand && matchesDiscount && matchesSearch;
+    const matchesPrice = (!minPrice || (item.price || 0) >= Number(minPrice)) && (!maxPrice || (item.price || 0) <= Number(maxPrice));
+    const matchesNicotine = nicotineFilter === 'all' || item.nicotineOptions?.includes(nicotineFilter);
+    const matchesSize = sizeFilter === 'all' || item.sizeOptions?.includes(sizeFilter);
+    return matchesCategory && matchesBrand && matchesDiscount && matchesSearch && matchesPrice && matchesNicotine && matchesSize;
   }).sort((a, b) => {
     switch (sortBy) {
-      case 'price-asc': return a.price - b.price;
-      case 'price-desc': return b.price - a.price;
+      case 'price-asc': return (a.price ?? Infinity) - (b.price ?? Infinity);
+      case 'price-desc': return (b.price ?? 0) - (a.price ?? 0);
       case 'rating': return b.rating - a.rating;
       case 'reviews': return b.reviewsCount - a.reviewsCount;
+      case 'newest': return (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0);
       default: return 0;
     }
   });
+  const pageSize = 12;
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  const visibleProducts = filteredProducts.slice((page - 1) * pageSize, page * pageSize);
 
   const formatRupiah = (num) => {
+    if (num === null || num === undefined || num <= 0) {
+      return 'Hubungi kami';
+    }
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -134,15 +222,16 @@ export default function App() {
   };
 
   const getCategoryIcon = (iconName) => {
-    switch (iconName) {
-      case 'Smartphone': return <Smartphone size={20} />;
-      case 'Cpu': return <Cpu size={20} />;
-      case 'Droplets': return <Droplets size={20} />;
-      case 'Flame': return <Flame size={20} />;
-      case 'Layers': return <Layers size={20} />;
-      case 'Wrench': return <Wrench size={20} />;
-      default: return <Sparkles size={20} />;
-    }
+    const shapes = {
+      Sparkles: <><path d="M8 4v4M6 6h4M17 13v6M14 16h6" /><path d="m12 10 1.6 3.4L17 15l-3.4 1.6L12 20l-1.6-3.4L7 15l3.4-1.6L12 10Z" /></>,
+      Smartphone: <><rect x="8" y="3" width="8" height="18" rx="2.2" /><path d="M10 6h4M10.5 17h3" /><path d="M8 8h8" /></>,
+      Cpu: <><rect x="6" y="5" width="12" height="15" rx="2" /><path d="M9 8h6v7H9zM9 3v2M15 3v2M9 20v1M15 20v1M3 9h3M3 16h3M18 9h3M18 16h3" /></>,
+      Droplets: <><path d="M7 5h10l1 4v10H6V9l1-4Z" /><path d="M7 5h10M9 9h6v6H9zM10 3h4" /></>,
+      Flame: <><path d="M9 5h6l1 4v11H8V9l1-4Z" /><path d="M9 9h6M10 12h4M10 3h4" /><path d="M10 16h4" /></>,
+      Layers: <><path d="M8 4h8v5H8zM6 9h12v5H6zM8 14h8v6H8z" /><path d="M10 6h4M8 11h8M10 17h4" /></>,
+      Wrench: <><path d="M8 4h8l2 3v4H6V7l2-3Z" /><path d="M9 11v8h6v-8M11 14h2M10 21h4" /></>
+    };
+    return <svg className="category-original-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[iconName] || shapes.Sparkles}</svg>;
   };
 
   const getFeatureIcon = (iconName) => {
@@ -250,11 +339,17 @@ export default function App() {
                 placeholder="Cari device, liquid, coil, atau brand favoritmu..."
                 className="search-input"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+                list="product-suggestions"
               />
+              <datalist id="product-suggestions">
+                {PRODUCTS.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 8).map((item) => <option key={item.id} value={item.name} />)}
+              </datalist>
             </div>
 
             <div className="header-actions">
+              <a className="btn-icon" href="#/wishlist" title="Wishlist"><Heart size={20} fill={wishlist.length ? 'currentColor' : 'none'} /></a>
+              <a className="btn-icon" href="#/account" title="Akun"><span aria-hidden="true">◯</span></a>
               <button 
                 className="btn-icon" 
                 onClick={() => setIsCartOpen(true)}
@@ -292,11 +387,27 @@ export default function App() {
           onBack={() => setIsCheckoutOpen(false)}
           onComplete={() => setCart([])}
         />
+      ) : trustRoute ? (
+        <TrustPage type={trustRoute} wishlist={wishlist} products={PRODUCTS} onToggleWishlist={toggleWishlist} onLogin={(email) => { setAccountEmail(email); setTrustRoute(null); setIsCheckoutOpen(true); }} />
+      ) : productSlug && !activeProduct ? (
+        <main className="product-not-found">
+          <div className="product-not-found-card">
+            <span className="section-tag">404 · PRODUK TIDAK DITEMUKAN</span>
+            <h1>Produk ini tidak tersedia</h1>
+            <p>Slug produk tidak valid atau produk sudah tidak tercatat di katalog.</p>
+            <a className="btn-primary" href="#featured-products">Kembali ke katalog</a>
+          </div>
+        </main>
       ) : activeProduct ? (
         <ProductPage
           product={activeProduct}
           formatRupiah={formatRupiah}
+          whatsapp={STORE_INFO.whatsapp.replace(/[^0-9]/g, '')}
           onAddToCart={addToCart}
+          onBuyNow={(product, qty) => {
+            addToCart(product, qty);
+            requireLoginForCheckout();
+          }}
         />
       ) : (
       <>
@@ -332,72 +443,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* Category Strip Grid */}
-      <section className="category-strip">
-        <div className="container">
-          <div className="category-grid">
-            {CATEGORIES.map((cat) => (
-              <div
-                key={cat.id}
-                className={`category-chip ${selectedCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setSelectedCategory(cat.id)}
-              >
-                <div className="category-icon">
-                  {getCategoryIcon(cat.icon)}
-                </div>
-                <div className="category-name">{cat.name}</div>
-                <div className="category-count">{cat.count} Produk</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* Features Value Proposition Bar */}
-      <section className="container">
-        <div className="features-bar">
-          {STORE_FEATURES.map((feat, idx) => (
-            <div key={idx} className="feature-box">
-              <div className="feature-icon-wrapper">
-                {getFeatureIcon(feat.icon)}
-              </div>
-              <div className="feature-info">
-                <h4>{feat.title}</h4>
-                <p>{feat.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Promo Deals Grid (Ala Vapehan) */}
-      <section className="container promo-deals-section">
-        <div className="promo-deals-grid">
-          {PROMO_DEALS.map((deal) => (
-            <div
-              key={deal.id}
-              className={`promo-deal-card theme-${deal.theme}`}
-              onClick={() => {
-                setSelectedCategory(deal.categoryTarget);
-                document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              <div className="promo-deal-content">
-                <div className="promo-deal-tag">{deal.tag}</div>
-                <h3 className="promo-deal-title">{deal.title}</h3>
-                <p className="promo-deal-desc">{deal.description}</p>
-                <span className="promo-deal-btn">
-                  Belanja {deal.productCount} <ChevronRight size={14} />
-                </span>
-              </div>
-              <div className="promo-deal-visual">
-                <div className={`promo-deal-badge badge-${deal.theme}`}>{deal.discountBadge}</div>
-                <img src={deal.image} alt={deal.title} className="promo-deal-img" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* Products Showcase Section */}
       <section id="featured-products" className="container">
@@ -410,29 +456,15 @@ export default function App() {
                 : CATEGORIES.find(c => c.id === selectedCategory)?.name}
             </h2>
           </div>
-          <div className="filter-pills">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                className={`filter-pill ${selectedCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setSelectedCategory(cat.id)}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="catalog-toolbar">
           <div className="toolbar-group-left">
-            <div className="filter-select-box">
-              <Tag size={14} />
-              <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>
-                {BRANDS.map((b) => (
-                  <option key={b} value={b === 'Semua Brand' ? 'all' : b}>{b}</option>
-                ))}
-              </select>
-            </div>
+            <div className="filter-select-box"><Tag size={14} /><select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>{BRANDS.map((b) => <option key={b} value={b === 'Semua Brand' ? 'all' : b}>{b}</option>)}</select></div>
+            <input className="catalog-price-input" type="number" min="0" placeholder="Harga min" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
+            <input className="catalog-price-input" type="number" min="0" placeholder="Harga max" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} />
+            <select className="catalog-filter-select" value={nicotineFilter} onChange={(e) => setNicotineFilter(e.target.value)}><option value="all">Semua nikotin</option>{[...new Set(PRODUCTS.flatMap((item) => item.nicotineOptions || []))].map((option) => <option key={option} value={option}>{option}</option>)}</select>
+            <select className="catalog-filter-select" value={sizeFilter} onChange={(e) => setSizeFilter(e.target.value)}><option value="all">Semua ukuran</option>{[...new Set(PRODUCTS.flatMap((item) => item.sizeOptions || []))].map((option) => <option key={option} value={option}>{option}</option>)}</select>
             <button
               className={`btn-toggle-discount ${onlyDiscount ? 'active' : ''}`}
               onClick={() => setOnlyDiscount(!onlyDiscount)}
@@ -450,6 +482,7 @@ export default function App() {
                 <option value="price-desc">Harga Tertinggi</option>
                 <option value="rating">Rating Tertinggi</option>
                 <option value="reviews">Paling Laris</option>
+                <option value="newest">Terbaru</option>
               </select>
             </div>
             {hasActiveFilter && (
@@ -473,7 +506,7 @@ export default function App() {
           </div>
         ) : (
           <div className="products-grid">
-            {filteredProducts.map((product) => (
+            {visibleProducts.map((product) => (
               <div key={product.id} className="product-card">
                 <a className="product-card-link" href={`#/product/${product.slug}`}>
                   <div className="product-thumb-container">
@@ -487,6 +520,7 @@ export default function App() {
                         -{product.discountPercent}%
                       </span>
                     )}
+                    <button type="button" className={`product-wishlist ${wishlist.includes(product.id) ? 'active' : ''}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleWishlist(product.id); }} aria-label={wishlist.includes(product.id) ? `Hapus ${product.name} dari wishlist` : `Tambah ${product.name} ke wishlist`}><Heart size={17} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
                     <img
                       src={product.image}
                       alt={product.name}
@@ -502,7 +536,7 @@ export default function App() {
                     <div className="product-rating">
                       <div className="rating-stars">
                         <Star size={14} fill="currentColor" />
-                        <span style={{ fontWeight: '700', color: '#fff' }}>{product.rating}</span>
+                        <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{product.rating}</span>
                       </div>
                       <span className="rating-count">({product.reviewsCount} ulasan)</span>
                     </div>
@@ -515,19 +549,51 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                    <div className="product-stock-info">
+                      {product.inStock === false || (typeof product.stock === 'number' && product.stock <= 0)
+                        ? 'Stok habis'
+                        : typeof product.stock === 'number'
+                          ? `Stok: ${product.stock}`
+                          : 'Stok tersedia'}
+                    </div>
                   </div>
                 </a>
 
                 <div className="product-info product-info-actions">
-                  <button className="btn-add-cart" onClick={() => addToCart(product)}>
-                    <Plus size={16} /> Beli
-                  </button>
+                  {product.price && product.price > 0 ? (
+                    <button 
+                      className="btn-add-cart" 
+                      disabled={product.inStock === false || (typeof product.stock === 'number' && product.stock <= 0)}
+                      onClick={() => addToCart(product)}
+                    >
+                      <Plus size={16} /> Beli
+                    </button>
+                  ) : (
+                    <a
+                      className="btn-add-cart"
+                      href={`https://wa.me/${STORE_INFO.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Halo RTV, saya ingin tanya harga & info produk: ${product.name}`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      Hubungi kami
+                    </a>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
+        {totalPages > 1 && (
+          <nav className="catalog-pagination" aria-label="Paginasi katalog">
+            <button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Sebelumnya</button>
+            <span>Halaman {page} dari {totalPages}</span>
+            <button disabled={page === totalPages} onClick={() => setPage((current) => current + 1)}>Berikutnya</button>
+          </nav>
+        )}
       </section>
+      </>
+      )}
 
       {/* Cart Drawer */}
       {isCartOpen && (
@@ -584,12 +650,14 @@ export default function App() {
                           </span>
                           <button
                             className="quantity-btn"
+                            disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
                             onClick={() => updateQuantity(item.id, 1)}
+                            title={typeof item.stock === 'number' && item.quantity >= item.stock ? `Maksimal stok: ${item.stock}` : 'Tambah'}
                           >
                             <Plus size={14} />
                           </button>
                         </div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#fff' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>
                           {formatRupiah(item.price * item.quantity)}
                         </div>
                       </div>
@@ -609,83 +677,13 @@ export default function App() {
                   className="btn-primary"
                   style={{ width: '100%', padding: '14px' }}
                   onClick={() => {
-                    setIsCartOpen(false);
-                    setIsCheckoutOpen(true);
+                    requireLoginForCheckout();
                   }}
                 >
                   Lanjut ke Checkout
                 </button>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Product Detail Modal */}
-      {selectedProduct && (
-        <div className="modal-overlay" onClick={() => setSelectedProduct(null)}>
-          <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="detail-modal-close" onClick={() => setSelectedProduct(null)}>
-              <X size={18} />
-            </button>
-            <div className="detail-modal-gallery">
-              <img src={selectedProduct.image} alt={selectedProduct.name} />
-            </div>
-            <div className="detail-modal-content">
-              <span className="product-brand" style={{ marginBottom: '8px' }}>
-                {selectedProduct.brand}
-              </span>
-              <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: '800', marginBottom: '12px' }}>
-                {selectedProduct.name}
-              </h2>
-              <div className="product-rating" style={{ marginBottom: '16px' }}>
-                <div className="rating-stars">
-                  <Star size={16} fill="currentColor" />
-                  <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>
-                    {selectedProduct.rating}
-                  </span>
-                </div>
-                <span className="rating-count">({selectedProduct.reviewsCount} customer reviews)</span>
-              </div>
-              <div className="product-price-row" style={{ marginBottom: '20px' }}>
-                <div className="product-price" style={{ fontSize: '24px' }}>
-                  {formatRupiah(selectedProduct.price)}
-                </div>
-                {selectedProduct.originalPrice && (
-                  <div className="product-price-original" style={{ fontSize: '15px' }}>
-                    {formatRupiah(selectedProduct.originalPrice)}
-                  </div>
-                )}
-              </div>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
-                {selectedProduct.description}
-              </p>
-              {selectedProduct.features && (
-                <div style={{ marginBottom: '24px' }}>
-                  <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                    Fitur & Spesifikasi:
-                  </h4>
-                  <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {selectedProduct.features.map((feat, i) => (
-                      <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#fff' }}>
-                        <Check size={14} color="var(--primary-red)" /> {feat}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <div style={{ marginTop: 'auto', display: 'flex', gap: '12px' }}>
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    addToCart(selectedProduct);
-                    setSelectedProduct(null);
-                  }}
-                >
-                  <ShoppingBag size={18} /> Tambah ke Keranjang
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -766,8 +764,6 @@ export default function App() {
           </div>
         </div>
       </footer>
-      </>
-      )}
     </div>
   );
 }
