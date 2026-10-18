@@ -1,9 +1,19 @@
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, CreditCard, MapPin, ShoppingBag, Truck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, CreditCard, MapPin, ShoppingBag, Truck, User } from 'lucide-react';
+import { authService } from './data/authService';
 import './CheckoutPage.css';
 
-export default function CheckoutPage({ cart, totalPrice, formatRupiah, whatsapp, onBack, onComplete }) {
-  const [form, setForm] = useState({ name: '', phone: '', address: '', courier: 'J&T Express', payment: 'Transfer Bank' });
+export default function CheckoutPage({ cart, totalPrice, formatRupiah, whatsapp, onBack, onComplete, currentUser, onGoToProfile }) {
+  const [form, setForm] = useState(() => {
+    const user = currentUser || authService.getCurrentUser();
+    return {
+      name: user?.name || '',
+      phone: user?.phone || '',
+      address: user?.address ? `${user.address}${user.city ? `, ${user.city}` : ''}` : '',
+      courier: 'J&T Express',
+      payment: 'Transfer Bank'
+    };
+  });
   const [receipt, setReceipt] = useState(null);
   const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   const shippingCost = form.courier === 'Instant / Sameday' ? 18000 : 12000;
@@ -45,8 +55,14 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
       shippingCost,
       grandTotal,
       orderId: `RTV-${Date.now().toString().slice(-8)}`,
-      createdAt: new Date().toLocaleString('id-ID')
+      createdAt: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
+      status: 'Sedang Dikirim',
+      trackingNumber: `JNT-${Date.now().toString().slice(-10)}`
     };
+    
+    // Save to user order history
+    authService.addOrder(orderData);
+
     setReceipt(orderData);
     onComplete();
 
@@ -137,6 +153,17 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
           >
             Kirim Ringkasan ke WhatsApp Admin
           </a>
+
+          {onGoToProfile && (
+            <button 
+              className="receipt-back-btn" 
+              style={{ background: 'var(--primary-red)', color: '#ffffff', borderColor: 'var(--primary-red)', marginTop: '8px' }}
+              onClick={onGoToProfile}
+            >
+              <User size={15} style={{ verticalAlign: 'middle', marginRight: '6px', display: 'inline' }} />
+              Lihat di Profil & Lacak Resi
+            </button>
+          )}
 
           <button className="receipt-back-btn" onClick={onBack}>
             Kembali ke Toko

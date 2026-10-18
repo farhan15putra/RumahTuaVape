@@ -8,3 +8,5 @@
 .receipt-back-btn{display:block;width:100%;margin-top:10px;padding:12px;border:1px solid var(--border-light);border-radius:var(--radius-md);color:var(--text-secondary);font-weight:700;background:#fff;cursor:pointer}
 .receipt-back-btn:hover{background:var(--bg-subtle);color:var(--text-primary)}
 
+
+@media(max-width:600px){.checkout-page{padding:24px 14px 48px}.checkout-section{padding:18px 15px}.checkout-summary{padding:18px 15px}.checkout-heading h1{font-size:27px}.checkout-heading p{font-size:12px}.checkout-choice{align-items:flex-start;font-size:12px}.receipt-card{margin:18px auto;padding:20px 14px}.receipt-item{gap:10px;font-size:12px}}

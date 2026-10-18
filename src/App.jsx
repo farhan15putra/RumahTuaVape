@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Search, ShieldCheck, Truck, RefreshCw, Headphones, 
-  Star, ChevronRight, X, Plus, Minus, Heart, Phone, MapPin, 
+  Star, ChevronRight, X, Plus, Minus, Phone, MapPin, 
   Clock, Flame, Smartphone, Cpu, Droplets, Layers, Wrench, Sparkles, Check,
-  Tag, Percent, ArrowUpDown
+  Tag, Percent, ArrowUpDown, User
 } from 'lucide-react';
 import { PRODUCTS, CATEGORIES, STORE_FEATURES, STORE_INFO, BRANDS, PROMO_DEALS } from './data/products';
 import ProductPage from './ProductPage';
 import CheckoutPage from './CheckoutPage';
 import TrustPage from './TrustPage';
+import LoginPage from './LoginPage';
+import ProfilePage from './ProfilePage';
+import AdminDashboard from './AdminDashboard';
+import { authService } from './data/authService';
 import './App.css';
 
 // Route hash: #/product/<slug>. Ambil slug dari hash saat ini.
@@ -44,15 +48,30 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [notification, setNotification] = useState(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [accountEmail, setAccountEmail] = useState(() => localStorage.getItem('rtv_account_email') || '');
+  const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
+  const [loginRedirect, setLoginRedirect] = useState(null);
+  const [activeRoute, setActiveRoute] = useState(() => {
+    const match = window.location.hash.match(/^#\/(login|profile|account|about|policy|admin)$/);
+    return match ? match[1] : null;
+  });
   const [brandFilter, setBrandFilter] = useState(queryParams.get('brand') || 'all');
   const [onlyDiscount, setOnlyDiscount] = useState(queryParams.get('discount') === '1');
   const [sortBy, setSortBy] = useState(queryParams.get('sort') || 'default');
-  const [wishlist, setWishlist] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('rtv_wishlist') || '[]'); } catch { return []; }
-  });
-  const [trustRoute, setTrustRoute] = useState(() => window.location.hash.match(/^#\/(account|wishlist|about|policy)$/)?.[1] || null);
+  const [showCatalogFilters, setShowCatalogFilters] = useState(false);
+  const [trustRoute, setTrustRoute] = useState(() => window.location.hash.match(/^#\/(about|policy)$/)?.[1] || null);
   const [productSlug, setProductSlug] = useState(getSlugFromHash);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      setIsHeaderVisible(currentScrollY < 24 || currentScrollY < lastScrollY);
+      lastScrollY = currentScrollY;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     try {
@@ -74,17 +93,19 @@ export default function App() {
     setPage(1);
   }, [searchQuery, selectedCategory, brandFilter, minPrice, maxPrice, nicotineFilter, sizeFilter, onlyDiscount, sortBy]);
 
-  useEffect(() => {
-    try { localStorage.setItem('rtv_wishlist', JSON.stringify(wishlist)); } catch {}
-  }, [wishlist]);
 
   useEffect(() => {
     const onHash = () => {
       const slug = getSlugFromHash();
       setProductSlug(slug);
-      setTrustRoute(window.location.hash.match(/^#\/(account|wishlist|about|policy)$/)?.[1] || null);
+      const match = window.location.hash.match(/^#\/(login|profile|account|about|policy|admin)$/);
+      const matchedRoute = match ? match[1] : null;
+      setActiveRoute(matchedRoute);
+      setTrustRoute(window.location.hash.match(/^#\/(about|policy)$/)?.[1] || null);
       window.scrollTo({ top: 0 });
-      if (!slug && !window.location.hash.match(/^#\/(account|wishlist|about|policy)$/)) window.setTimeout(() => document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth' }), 0);
+      if (!slug && !matchedRoute) {
+        window.setTimeout(() => document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth' }), 0);
+      }
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -100,6 +121,25 @@ export default function App() {
     setTimeout(() => {
       setNotification(null);
     }, 3000);
+  };
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    showToast(`Selamat datang kembali, ${user.name}!`);
+    if (loginRedirect === 'checkout') {
+      setLoginRedirect(null);
+      window.location.hash = '';
+      setIsCheckoutOpen(true);
+    } else {
+      window.location.hash = '#/profile';
+    }
+  };
+
+  const handleLogout = () => {
+    authService.logout();
+    setCurrentUser(null);
+    window.location.hash = '#/login';
+    showToast('Anda telah keluar dari akun');
   };
 
   const addToCart = (product, qty = 1) => {
@@ -134,25 +174,24 @@ export default function App() {
     });
 
     if (reachedMax) {
-      showToast(`⚠️ Kuantitas sudah mencapai batas stok (${maxStock})`);
+      showToast(`Kuantitas sudah mencapai batas stok (${maxStock})`);
     } else {
-      showToast(`✓ Ditambahkan ke keranjang: ${product.name.slice(0, 24)}...`);
+      showToast(`Ditambahkan ke keranjang: ${product.name.slice(0, 24)}...`);
     }
   };
 
   const requireLoginForCheckout = () => {
-    if (accountEmail) {
+    if (currentUser) {
       setIsCartOpen(false);
       setIsCheckoutOpen(true);
       return;
     }
     setIsCartOpen(false);
-    setTrustRoute('account');
-    window.location.hash = '#/account';
-    showToast('Login diperlukan sebelum checkout');
+    setLoginRedirect('checkout');
+    window.location.hash = '#/login';
+    showToast('Silakan login terlebih dahulu untuk checkout');
   };
 
-  const toggleWishlist = (id) => setWishlist((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
 
   const activeProduct = productSlug
     ? PRODUCTS.find((p) => p.slug === productSlug)
@@ -165,7 +204,7 @@ export default function App() {
           if (item.id === id) {
             const maxStock = typeof item.stock === 'number' ? item.stock : Infinity;
             if (delta > 0 && item.quantity >= maxStock) {
-              showToast(`⚠️ Kuantitas sudah mencapai batas stok (${maxStock})`);
+              showToast(`Kuantitas sudah mencapai batas stok (${maxStock})`);
               return item;
             }
             const newQty = item.quantity + delta;
@@ -321,7 +360,7 @@ export default function App() {
       </div>
 
       {/* Main Header */}
-      <header className="header">
+      <header className={`header ${isHeaderVisible ? 'header-visible' : 'header-hidden'}`}>
         <div className="container">
           <div className="header-main">
             <a href="#" className="brand-logo">
@@ -348,8 +387,18 @@ export default function App() {
             </div>
 
             <div className="header-actions">
-              <a className="btn-icon" href="#/wishlist" title="Wishlist"><Heart size={20} fill={wishlist.length ? 'currentColor' : 'none'} /></a>
-              <a className="btn-icon" href="#/account" title="Akun"><span aria-hidden="true">◯</span></a>
+              {currentUser ? (
+                <a className="btn-user-header" href="#/profile" title={`Akun Saya: ${currentUser.name}`}>
+                  <div className="header-avatar-circle">
+                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <span className="header-user-name">{currentUser.name.split(' ')[0]}</span>
+                </a>
+              ) : (
+                <a className="btn-icon" href="#/login" title="Masuk / Daftar Akun">
+                  <User size={20} />
+                </a>
+              )}
               <button 
                 className="btn-icon" 
                 onClick={() => setIsCartOpen(true)}
@@ -384,15 +433,76 @@ export default function App() {
           totalPrice={totalCartPrice}
           formatRupiah={formatRupiah}
           whatsapp={STORE_INFO.whatsapp.replace(/[^0-9]/g, '')}
+          currentUser={currentUser}
           onBack={() => setIsCheckoutOpen(false)}
           onComplete={() => setCart([])}
+          onGoToProfile={() => {
+            setIsCheckoutOpen(false);
+            window.location.hash = '#/profile';
+          }}
+        />
+      ) : activeRoute === 'admin' ? (
+        <AdminDashboard onLogout={() => { window.location.hash = '#/login'; }} />
+      ) : activeRoute === 'login' ? (
+        <LoginPage
+          onLoginSuccess={handleLoginSuccess}
+          onBackToHome={() => { window.location.hash = ''; }}
+          redirectReason={loginRedirect}
+        />
+      ) : activeRoute === 'profile' || (activeRoute === 'account' && currentUser) ? (
+        <ProfilePage
+          user={currentUser}
+          products={PRODUCTS}
+          onUpdateUser={(updated) => {
+            setCurrentUser(updated);
+          }}
+          onLogout={handleLogout}
+          onAddToCart={addToCart}
+          formatRupiah={formatRupiah}
+          whatsapp={STORE_INFO.whatsapp}
+          onNavigateToHome={() => { window.location.hash = ''; }}
+        />
+      ) : activeRoute === 'account' && !currentUser ? (
+        <LoginPage
+          onLoginSuccess={handleLoginSuccess}
+          onBackToHome={() => { window.location.hash = ''; }}
+        />
+      ) : activeRoute === 'wishlist' && currentUser ? (
+        <ProfilePage
+          user={currentUser}
+          defaultTab="wishlist"
+          products={PRODUCTS}
+          onUpdateUser={(updated) => {
+            setCurrentUser(updated);
+          }}
+          onLogout={handleLogout}
+          onAddToCart={addToCart}
+          formatRupiah={formatRupiah}
+          whatsapp={STORE_INFO.whatsapp}
+          onNavigateToHome={() => { window.location.hash = ''; }}
+        />
+      ) : activeRoute === 'wishlist' ? (
+        <TrustPage
+          type="wishlist"
+          products={PRODUCTS}
+          onLogin={(email) => {
+            const u = authService.login(email, '');
+            handleLoginSuccess(u);
+          }}
         />
       ) : trustRoute ? (
-        <TrustPage type={trustRoute} wishlist={wishlist} products={PRODUCTS} onToggleWishlist={toggleWishlist} onLogin={(email) => { setAccountEmail(email); setTrustRoute(null); setIsCheckoutOpen(true); }} />
+        <TrustPage
+          type={trustRoute}
+          products={PRODUCTS}
+          onLogin={(email) => {
+            const u = authService.login(email, '');
+            handleLoginSuccess(u);
+          }}
+        />
       ) : productSlug && !activeProduct ? (
         <main className="product-not-found">
           <div className="product-not-found-card">
-            <span className="section-tag">404 · PRODUK TIDAK DITEMUKAN</span>
+            <span className="section-tag">404 Â· PRODUK TIDAK DITEMUKAN</span>
             <h1>Produk ini tidak tersedia</h1>
             <p>Slug produk tidak valid atau produk sudah tidak tercatat di katalog.</p>
             <a className="btn-primary" href="#featured-products">Kembali ke katalog</a>
@@ -447,49 +557,31 @@ export default function App() {
 
       {/* Products Showcase Section */}
       <section id="featured-products" className="container">
-        <div className="section-header">
+        <div className="section-header catalog-heading">
           <div className="section-header-title">
             <span className="section-tag">CATALOG PILIHAN</span>
             <h2 className="section-title">
-              {selectedCategory === 'all' 
-                ? 'Semua Produk Pilihan' 
-                : CATEGORIES.find(c => c.id === selectedCategory)?.name}
+              {selectedCategory === 'all' ? 'Semua Produk Pilihan' : CATEGORIES.find(c => c.id === selectedCategory)?.name}
             </h2>
           </div>
+          <button className="catalog-filter-toggle" onClick={() => setShowCatalogFilters((visible) => !visible)} aria-expanded={showCatalogFilters}>
+            Filter <ChevronRight size={14} className={showCatalogFilters ? 'filter-chevron-open' : ''} />
+          </button>
         </div>
 
-        <div className="catalog-toolbar">
+        <div className={`catalog-toolbar ${showCatalogFilters ? 'filters-open' : 'filters-closed'}`}>
           <div className="toolbar-group-left">
             <div className="filter-select-box"><Tag size={14} /><select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>{BRANDS.map((b) => <option key={b} value={b === 'Semua Brand' ? 'all' : b}>{b}</option>)}</select></div>
             <input className="catalog-price-input" type="number" min="0" placeholder="Harga min" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
             <input className="catalog-price-input" type="number" min="0" placeholder="Harga max" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} />
             <select className="catalog-filter-select" value={nicotineFilter} onChange={(e) => setNicotineFilter(e.target.value)}><option value="all">Semua nikotin</option>{[...new Set(PRODUCTS.flatMap((item) => item.nicotineOptions || []))].map((option) => <option key={option} value={option}>{option}</option>)}</select>
             <select className="catalog-filter-select" value={sizeFilter} onChange={(e) => setSizeFilter(e.target.value)}><option value="all">Semua ukuran</option>{[...new Set(PRODUCTS.flatMap((item) => item.sizeOptions || []))].map((option) => <option key={option} value={option}>{option}</option>)}</select>
-            <button
-              className={`btn-toggle-discount ${onlyDiscount ? 'active' : ''}`}
-              onClick={() => setOnlyDiscount(!onlyDiscount)}
-            >
-              <Percent size={14} /> Diskon ≥ 15%
-            </button>
+            <button className={`btn-toggle-discount ${onlyDiscount ? 'active' : ''}`} onClick={() => setOnlyDiscount(!onlyDiscount)}><Percent size={14} /> Diskon ≥ 15%</button>
           </div>
           <div className="toolbar-group-right">
             <span className="catalog-results-count">{filteredProducts.length} produk</span>
-            <div className="filter-select-box">
-              <ArrowUpDown size={14} />
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                <option value="default">Urutkan: Default</option>
-                <option value="price-asc">Harga Terendah</option>
-                <option value="price-desc">Harga Tertinggi</option>
-                <option value="rating">Rating Tertinggi</option>
-                <option value="reviews">Paling Laris</option>
-                <option value="newest">Terbaru</option>
-              </select>
-            </div>
-            {hasActiveFilter && (
-              <button className="btn-reset-filters" onClick={resetFilters}>
-                <X size={12} /> Reset
-              </button>
-            )}
+            <div className="filter-select-box"><ArrowUpDown size={14} /><select value={sortBy} onChange={(e) => setSortBy(e.target.value)}><option value="default">Urutkan: Default</option><option value="price-asc">Harga Terendah</option><option value="price-desc">Harga Tertinggi</option><option value="rating">Rating Tertinggi</option><option value="reviews">Paling Laris</option><option value="newest">Terbaru</option></select></div>
+            {hasActiveFilter && <button className="btn-reset-filters" onClick={resetFilters}><X size={12} /> Reset</button>}
           </div>
         </div>
 
@@ -520,7 +612,6 @@ export default function App() {
                         -{product.discountPercent}%
                       </span>
                     )}
-                    <button type="button" className={`product-wishlist ${wishlist.includes(product.id) ? 'active' : ''}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleWishlist(product.id); }} aria-label={wishlist.includes(product.id) ? `Hapus ${product.name} dari wishlist` : `Tambah ${product.name} ke wishlist`}><Heart size={17} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} /></button>
                     <img
                       src={product.image}
                       alt={product.name}
@@ -586,9 +677,13 @@ export default function App() {
         )}
         {totalPages > 1 && (
           <nav className="catalog-pagination" aria-label="Paginasi katalog">
-            <button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Sebelumnya</button>
-            <span>Halaman {page} dari {totalPages}</span>
-            <button disabled={page === totalPages} onClick={() => setPage((current) => current + 1)}>Berikutnya</button>
+            <button className="pagination-arrow" aria-label="Halaman sebelumnya" disabled={page === 1} onClick={() => setPage((current) => current - 1)}>&lt;&lt;</button>
+            <div className="pagination-pages">
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
+                <button key={pageNumber} className={page === pageNumber ? 'active' : ''} aria-label={`Halaman ${pageNumber}`} aria-current={page === pageNumber ? 'page' : undefined} onClick={() => setPage(pageNumber)}>{pageNumber}</button>
+              ))}
+            </div>
+            <button className="pagination-arrow" aria-label="Halaman berikutnya" disabled={page === totalPages} onClick={() => setPage((current) => current + 1)}>&gt;&gt;</button>
           </nav>
         )}
       </section>
@@ -730,12 +825,12 @@ export default function App() {
             </div>
 
             <div>
-              <h4 className="footer-heading">Layanan & Garansi</h4>
+              <h4 className="footer-heading">Layanan & Akun</h4>
               <ul className="footer-links">
-                <li><a href="#">Cek Keaslian Produk</a></li>
-                <li><a href="#">Ketentuan Retur & Garansi</a></li>
-                <li><a href="#">Pengiriman Instant / Sameday</a></li>
-                <li><a href="#">FAQ & Pertanyaan Umum</a></li>
+                <li><a href="#/profile">Akun & Profil Member</a></li>
+                <li><a href="#/wishlist">Wishlist Saya</a></li>
+                <li><a href="#/about">Tentang Rumah Tua Lounge</a></li>
+                <li><a href="#/policy">Ketentuan Retur & Garansi</a></li>
                 <li><a href="#">Panduan Pemula (Coil & Ohm)</a></li>
               </ul>
             </div>
@@ -756,7 +851,7 @@ export default function App() {
 
           <div className="footer-bottom">
             <div>
-              © 2026 Rumah Tua Vape (RTV). Hak cipta dilindungi undang-undang.
+              Â© 2026 Rumah Tua Vape (RTV). Hak cipta dilindungi undang-undang.
             </div>
             <div>
               Peringatan: Produk ini mengandung nikotin. Hanya untuk 21+ tahun.
@@ -767,3 +862,4 @@ export default function App() {
     </div>
   );
 }
+
