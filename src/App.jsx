@@ -52,7 +52,7 @@ export default function App() {
   const [loginRedirect, setLoginRedirect] = useState(null);
   const [activeRoute, setActiveRoute] = useState(() => {
     const match = window.location.hash.match(/^#\/(login|profile|account|about|policy|admin)$/);
-    return match ? match[1] : null;
+    return match ? match[1] : (authService.getCurrentUser() ? null : 'login');
   });
   const [brandFilter, setBrandFilter] = useState(queryParams.get('brand') || 'all');
   const [onlyDiscount, setOnlyDiscount] = useState(queryParams.get('discount') === '1');
