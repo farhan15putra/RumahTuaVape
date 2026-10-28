@@ -251,27 +251,11 @@ export default function ProfilePage({
               >
                 <Tag size={16} />
                 <span>Voucher Belanja</span>
-                <span className="menu-badge promo">3 Aktif</span>
+                <span className="menu-badge">3</span>
                 <ChevronRight size={15} className="menu-arrow" />
               </button>
             </div>
 
-            {/* Official Store Verification Box */}
-            <div className="profile-sidebar-card">
-              <div className="lounge-card-header">
-                <ShieldCheck size={18} color="var(--primary-red)" />
-                <strong>Jaminan 100% Authentic</strong>
-              </div>
-              <p>Produk tersegel resmi dengan kode verifikasi distributor resmi Indonesia.</p>
-              <a 
-                href={`https://wa.me/${(whatsapp || '6281234567890').replace(/[^0-9]/g, '')}`}
-                target="_blank"
-                rel="noreferrer"
-                className="lounge-cs-btn"
-              >
-                <Phone size={13} /> Tanya Admin Toko
-              </a>
-            </div>
           </aside>
 
           {/* Right Main Panel */}

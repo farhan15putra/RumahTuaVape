@@ -102,10 +102,7 @@ export default function App() {
       const matchedRoute = match ? match[1] : null;
       setActiveRoute(matchedRoute);
       setTrustRoute(window.location.hash.match(/^#\/(about|policy)$/)?.[1] || null);
-      window.scrollTo({ top: 0 });
-      if (!slug && !matchedRoute) {
-        window.setTimeout(() => document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth' }), 0);
-      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -131,7 +128,7 @@ export default function App() {
       window.location.hash = '';
       setIsCheckoutOpen(true);
     } else {
-      window.location.hash = '#/profile';
+      window.location.hash = '';
     }
   };
 

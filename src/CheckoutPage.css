@@ -10,3 +10,5 @@
 
 
 @media(max-width:600px){.checkout-page{padding:24px 14px 48px}.checkout-section{padding:18px 15px}.checkout-summary{padding:18px 15px}.checkout-heading h1{font-size:27px}.checkout-heading p{font-size:12px}.checkout-choice{align-items:flex-start;font-size:12px}.receipt-card{margin:18px auto;padding:20px 14px}.receipt-item{gap:10px;font-size:12px}}
+
+.checkout-points-option{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0;padding:12px;border:1px solid #fecdd3;border-radius:10px;background:#fff7f8;color:var(--text-primary)}.checkout-points-option label{display:flex;align-items:center;gap:9px;cursor:pointer}.checkout-points-option span{display:grid;gap:2px}.checkout-points-option small{color:var(--text-muted)}.checkout-points-option>b{color:var(--primary-red);white-space:nowrap}

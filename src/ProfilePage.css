@@ -1416,3 +1416,22 @@
 @media(max-width:640px){
 .profile-container{width:100%;min-width:0}.profile-nav-header{overflow:hidden;white-space:nowrap;margin-bottom:14px}.profile-hero-card{width:100%;padding:15px 13px}.profile-hero-content{min-width:0}.profile-user-info{min-width:0;width:100%}.profile-name-row h1{font-size:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.profile-meta-tags{display:grid;grid-template-columns:1fr;gap:5px}.profile-meta-item{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.profile-points-pill{padding:8px 10px}.btn-profile-logout{padding:8px 10px}.profile-layout-grid{display:flex;flex-direction:column}.profile-sidebar{width:100%;min-width:0}.profile-nav-menu{width:100%;padding:5px;gap:0;overflow-x:auto}.profile-menu-item{flex:0 0 auto;padding:10px 11px;font-size:12px}.profile-main-content{width:100%;min-width:0}.profile-stats-grid{width:100%}.stat-card{min-width:0}.stat-card>div:last-child{min-width:0}.stat-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.profile-section-card{width:100%;overflow:hidden}.section-card-header h2{font-size:16px}.section-card-header p{font-size:11px}.order-card{overflow:hidden}.order-card-header{align-items:flex-start}.order-id,.order-card-body>div{min-width:0;max-width:100%}.order-card-body{display:flex;flex-direction:column}.order-item-row{grid-template-columns:42px minmax(0,1fr) auto!important}.order-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.form-grid-2,.form-grid-3{grid-template-columns:1fr!important}.profile-modal{width:calc(100vw - 24px);max-width:none;margin:12px;padding:18px}.wishlist-products-grid,.coupons-grid{grid-template-columns:1fr!important}.coupon-card{min-width:0}.invoice-modal{width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow-y:auto}
 }
+
+/* Profile visual refresh */
+.profile-page{min-height:100vh;padding:28px 24px 84px;background:radial-gradient(circle at 12% 0%,rgba(227,30,54,.07),transparent 28%),#f5f6f8}
+.profile-container{max-width:1180px}
+.profile-hero-card{position:relative;overflow:hidden;border:1px solid #f0d5d9;border-radius:22px;background:linear-gradient(135deg,#fff 0%,#fff7f8 100%);box-shadow:0 18px 40px rgba(120,28,43,.09)}
+.profile-hero-card::after{content:'';position:absolute;width:330px;height:330px;right:-100px;top:-150px;border:1px solid rgba(227,30,54,.12);border-radius:50%;box-shadow:0 0 0 28px rgba(227,30,54,.035),0 0 0 58px rgba(227,30,54,.025);pointer-events:none}
+.profile-hero-content,.profile-hero-actions{position:relative;z-index:1}
+.profile-avatar-letters{background:var(--primary-red);color:#fff;border-color:#e31837;box-shadow:0 10px 24px rgba(227,30,54,.22)}
+.profile-name-row h1{color:#171a20}
+.profile-meta-tags{color:#69707d}
+.profile-points-pill{background:#fff1f2;border-color:#fecdd3}
+.points-label{color:var(--primary-red)}
+.points-value{color:#171a20}
+.btn-profile-logout{background:#fff;color:#69707d}
+.profile-menu-item.active{background:#fff1f2;color:var(--primary-red)}
+.profile-menu-item.active .menu-arrow{color:var(--primary-red)}
+.profile-menu-item .menu-arrow{margin-left:auto}
+.profile-menu-item .menu-badge + .menu-arrow{margin-left:10px}
+@media(max-width:640px){.profile-page{padding:18px 12px 54px}.profile-hero-card{padding:22px 18px;border-radius:18px}.profile-name-row h1{font-size:22px}.profile-layout-grid{gap:16px}.profile-section-card{padding:18px 14px}}

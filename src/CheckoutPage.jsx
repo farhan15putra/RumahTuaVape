@@ -4,6 +4,7 @@ import { authService } from './data/authService';
 import './CheckoutPage.css';
 
 export default function CheckoutPage({ cart, totalPrice, formatRupiah, whatsapp, onBack, onComplete, currentUser, onGoToProfile }) {
+  const [redeemPoints, setRedeemPoints] = useState(false);
   const [form, setForm] = useState(() => {
     const user = currentUser || authService.getCurrentUser();
     return {
@@ -17,7 +18,19 @@ export default function CheckoutPage({ cart, totalPrice, formatRupiah, whatsapp,
   const [receipt, setReceipt] = useState(null);
   const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   const shippingCost = form.courier === 'Instant / Sameday' ? 18000 : 12000;
-  const grandTotal = totalPrice + shippingCost;
+  const pointsSummary = cart.reduce((summary, item) => {
+    const category = item.category;
+    const points = category === 'liquid' || category === 'saltnic' ? 120 : item.name?.toLowerCase().includes('cartridge') ? 80 : 0;
+    if (points > 0) {
+      summary.points += points * item.quantity;
+      summary.discount += (item.price || 0) * item.quantity;
+    }
+    return summary;
+  }, { points: 0, discount: 0 });
+  const pointsCost = pointsSummary.points;
+  const canRedeem = pointsCost > 0 && (currentUser?.points || 0) >= pointsCost;
+  const pointsDiscount = redeemPoints && canRedeem ? Math.min(totalPrice, pointsSummary.discount) : 0;
+  const grandTotal = totalPrice - pointsDiscount + shippingCost;
 
   const generateWhatsAppMessage = (orderData) => {
     const itemList = (orderData.items || [])
@@ -52,6 +65,7 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
       ...form,
       items: cart,
       subtotal: totalPrice,
+      pointsUsed: redeemPoints && canRedeem ? pointsCost : 0,
       shippingCost,
       grandTotal,
       orderId: `RTV-${Date.now().toString().slice(-8)}`,
@@ -60,8 +74,10 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
       trackingNumber: `JNT-${Date.now().toString().slice(-10)}`
     };
     
-    // Save to user order history
     authService.addOrder(orderData);
+    if (orderData.pointsUsed > 0) {
+      authService.updateProfile({ points: Math.max(0, (currentUser?.points || 0) - orderData.pointsUsed) });
+    }
 
     setReceipt(orderData);
     onComplete();
@@ -256,11 +272,19 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
                 </div>
               ))}
             </div>
+            <div className="checkout-points-option">
+              <label>
+                <input type="checkbox" checked={redeemPoints} onChange={(event) => setRedeemPoints(event.target.checked)} disabled={pointsCost === 0} />
+                <span><strong>Tukar dengan poin</strong><small>{pointsCost === 0 ? 'Produk di keranjang belum eligible' : canRedeem ? `${pointsCost} poin · Saldo ${currentUser?.points || 0} poin` : `Butuh ${pointsCost} poin · Saldo ${currentUser?.points || 0} poin`}</small></span>
+              </label>
+              {redeemPoints && canRedeem && <b>-{formatRupiah(pointsDiscount)}</b>}
+            </div>
             <div className="checkout-total">
               <div>
                 <span>Subtotal</span>
                 <b>{formatRupiah(totalPrice)}</b>
               </div>
+              {pointsDiscount > 0 && <div><span>Potongan poin</span><b>-{formatRupiah(pointsDiscount)}</b></div>}
               <div>
                 <span>Ongkir</span>
                 <b>{formatRupiah(shippingCost)}</b>
@@ -272,6 +296,9 @@ Mohon konfirmasi pesanan saya. Terima kasih!`;
             </div>
             <button className="checkout-primary" type="submit">
               Konfirmasi Pesanan ke WhatsApp
+            </button>
+            <button className="checkout-back checkout-return-store" type="button" onClick={onBack}>
+              Kembali ke toko
             </button>
             <small>Prototipe: setelah klik, rincian pesanan akan dikirim ke WhatsApp toko.</small>
           </aside>
